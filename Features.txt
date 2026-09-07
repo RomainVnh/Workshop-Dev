@@ -1,0 +1,518 @@
+================================================================================
+CHAUSSETTE ORPHELINE — Liste des features de base
+Plateforme de troc de chaussettes dépareillées entre particuliers
+CakePHP 5.4 / PHP 8.2+ / Migrations
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1. MODÈLE DE DONNÉES (Exemple) :
+--------------------------------------------------------------------------------
+
+
+users
+  id, email (unique), password, username (unique), display_name,
+  avatar_path, bio, city, postal_code, country,
+  tolerance_level (enum: 'jumelle_exacte' | 'assortie' | 'tout_accepte'),
+  trades_count, is_active, last_login, created, modified
+  
+
+socks                         (les fiches — le coeur du projet)
+  id, user_id (FK), title, description,
+  foot (enum: 'gauche'|'droite'|'indifferent'),
+  size_eu (int) ou size_range (enum: '18-22','23-26',... 'taille unique'),
+  color_primary_id (FK colors), color_secondary_id (FK colors, nullable),
+  pattern (enum: 'uni','rayures','pois','jacquard','chevrons','motif_fantaisie',
+           'sport','chaussette_de_noel','autre'),
+  material (enum: 'coton','laine','laine_merinos','bambou','synthetique',
+            'cachemire','mystere'),
+  wear_level (enum: 'neuve','bon_etat','vecue','heroique'),   
+  height (enum: 'socquette','mi-mollet','haute','montante'),
+  status (enum: 'disponible','reservee','troquee','retiree'),
+  lost_since (date, nullable)  <- "orpheline depuis le..."
+  views_count, created, modified
+  INDEX sur (status, color_primary_id, size_eu, pattern) pour les filtres
+
+
+sock_photos
+  id, sock_id (FK), path, is_cover (bool), position (int), created
+  -> 1 à 4 photos par fiche, une seule cover
+
+
+colors                        (table de référence, seedée)
+  id, name ('bleu marine'), slug, hex ('#1b2a4a'), family ('bleu')
+  -> permet un filtre par famille de couleur ET un rendu pastille
+
+
+trades                        (les propositions de troc)
+  id, requester_id (FK users), owner_id (FK users),
+  target_sock_id (FK socks)          <- la chaussette convoitée
+  status (enum: 'en_attente','acceptee','refusee','annulee','finalisee','expiree'),
+  message (text, le mot d'accroche)
+  responded_at, completed_at, expires_at, created, modified
+
+
+trade_items                   (ce que le demandeur met sur la table)
+  id, trade_id (FK), sock_id (FK)
+  -> N chaussettes proposées en échange (souvent 1, parfois plusieurs au choix)
+
+messages                      (fil de discussion adossé au troc)
+  id, trade_id (FK), user_id (FK), body (text), read_at, created
+
+favorites                     (mise de côté)
+  id, user_id (FK), sock_id (FK), created   UNIQUE(user_id, sock_id)
+
+reports                       (signalements)
+  id, reporter_id (FK), sock_id ou user_id, reason, comment, status, created
+
+badges + users_badges
+  badges: id, slug, name, description, icon, threshold_type, threshold_value
+  users_badges: user_id, badge_id, awarded_at
+
+reviews                       (V1 — évaluation après troc finalisé)
+  id, trade_id (FK), author_id, target_user_id, rating (1-5), comment, created
+
+
+
+================================================================================
+8. BACKLOG D'IMPLÉMENTATION — LISTE DE TICKETS
+================================================================================
+Chaque ticket est autonome, tient dans une session de travail, et se termine
+par quelque chose de visible dans le navigateur ou de vert dans les tests.
+Format :  [ ] ID — Titre
+              Fichiers : ce qu'on crée ou modifie
+              Fini quand : le critère d'acceptation, vérifiable
+              Dépend de : les tickets à faire avant
+
+
+--------------------------------------------------------------------------------
+LOT 0 — SOCLE (à faire avant tout le reste)
+--------------------------------------------------------------------------------
+
+[ ] F-01 — Connecter la base de données
+        Fichiers : config/app_local.php
+        Fini quand : la page d'accueil CakePHP affiche "CakePHP is able to
+                     connect to the database" en vert
+        Dépend de : rien
+
+[ ] F-02 — Installer les plugins d'authentification
+        Commandes : composer require cakephp/authentication cakephp/authorization
+        Fichiers : src/Application.php (middlewares), config/plugins.php
+        Fini quand : composer install passe et l'app démarre sans erreur
+        Dépend de : F-01
+
+[ ] F-03 — Installer la gestion d'images
+        Commandes : composer require josegonzalez/cakephp-upload intervention/image
+        Fini quand : les paquets sont dans composer.lock, poussés sur le repo
+        Dépend de : F-01
+
+[ ] F-04 — Layout de base et charte
+        Fichiers : templates/layout/default.php, webroot/css/app.css,
+                   templates/element/flash/*, templates/element/nav.php
+        Fini quand : header + footer + messages flash s'affichent sur toutes
+                     les pages, en responsive
+        Dépend de : F-01
+
+[ ] F-05 — Pages statiques et pages d'erreur
+        Fichiers : templates/Pages/{home,about,cgu,mentions}.php,
+                   templates/Error/{error400,error500}.php
+        Fini quand : /a-propos, /cgu répondent en 200 et une URL bidon
+                     affiche un 404 dans le ton
+        Dépend de : F-04
+
+
+--------------------------------------------------------------------------------
+LOT 1 — COMPTES ET AUTHENTIFICATION
+--------------------------------------------------------------------------------
+
+[ ] F-06 — Migration + modèle users
+        Commandes : bin/cake bake migration CreateUsers
+                    bin/cake bake model Users
+        Fichiers : config/Migrations/*, src/Model/Table/UsersTable.php,
+                   src/Model/Entity/User.php
+        Fini quand : migrate passe, et UsersTable valide email/pseudo/mot de
+                     passe (test unitaire vert)
+        Dépend de : F-01
+
+[ ] F-07 — Hachage du mot de passe
+        Fichiers : src/Model/Entity/User.php (_setPassword)
+        Fini quand : un utilisateur créé en console a un mot de passe hashé
+                     en base, jamais en clair
+        Dépend de : F-06
+
+[ ] F-08 — Inscription (étape 1)
+        Fichiers : src/Controller/UsersController.php (register),
+                   templates/Users/register.php
+        Fini quand : le formulaire crée un compte en status 'pending' et
+                     rejette pseudo/email déjà pris avec un message clair
+        Dépend de : F-07
+
+[ ] F-09 — Table auth_tokens + envoi de l'email de vérification
+        Fichiers : migration CreateAuthTokens, src/Mailer/UserMailer.php,
+                   templates/email/html/verify.php
+        Fini quand : l'inscription envoie un mail contenant un lien valable
+                     24 h (visible dans DebugKit en local)
+        Dépend de : F-08
+
+[ ] F-10 — Vérification de l'email
+        Fichiers : UsersController::verify
+        Fini quand : cliquer le lien passe le compte en 'active', le token
+                     devient inutilisable, et un lien expiré affiche un
+                     message d'erreur explicite
+        Dépend de : F-09
+
+[ ] F-11 — Connexion / déconnexion
+        Fichiers : src/Application.php (getAuthenticationService),
+                   UsersController::{login,logout}, templates/Users/login.php
+        Fini quand : on se connecte par email OU pseudo, la session est
+                     régénérée, et /mon-tiroir redirige vers /connexion
+                     quand on est déconnecté
+        Dépend de : F-02, F-10
+
+[ ] F-12 — Mot de passe oublié et réinitialisation
+        Fichiers : UsersController::{forgotPassword,resetPassword},
+                   templates correspondants
+        Fini quand : le parcours complet fonctionne et la réponse est la même
+                     que le compte existe ou non
+        Dépend de : F-09
+
+[ ] F-13 — Limitation des tentatives de connexion
+        Fichiers : migration CreateLoginAttempts, src/Controller/Component/
+                   ThrottleComponent.php
+        Fini quand : 6 échecs consécutifs sur un compte déclenchent une
+                     temporisation, testée automatiquement
+        Dépend de : F-11
+
+[ ] F-14 — Autorisation : policies de base
+        Fichiers : src/Policy/{UserPolicy,SockPolicy}.php,
+                   src/Application.php (AuthorizationMiddleware)
+        Fini quand : modifier la fiche d'un autre utilisateur renvoie un 403
+        Dépend de : F-02, F-11
+
+
+--------------------------------------------------------------------------------
+LOT 2 — PROFIL ET PERSONNALISATION
+--------------------------------------------------------------------------------
+
+[ ] F-15 — Tables user_profiles et user_preferences
+        Commandes : bin/cake bake migration CreateUserProfiles
+                    bin/cake bake migration CreateUserPreferences
+        Fini quand : migrate passe et les associations hasOne sont câblées
+        Dépend de : F-06
+
+[ ] F-16 — Édition du profil
+        Fichiers : src/Controller/AccountController.php (profile),
+                   templates/Account/profile.php
+        Fini quand : on modifie pseudo affiché, bio, ville, devise, et les
+                     changements sont visibles sur le profil public
+        Dépend de : F-15
+
+[ ] F-17 — Upload et recadrage de l'avatar
+        Fichiers : AccountController, src/Service/ImageService.php
+        Fini quand : l'avatar est redimensionné en 400x400 et 96x96, les EXIF
+                     sont supprimés, un fichier non-image est rejeté
+        Dépend de : F-03, F-16
+
+[ ] F-18 — Avatar-chaussette généré par défaut
+        Fichiers : src/View/Helper/AvatarHelper.php
+        Fini quand : un compte sans avatar affiche une chaussette générée
+                     de façon déterministe à partir de son id
+        Dépend de : F-16
+
+[ ] F-19 — Écran de préférences
+        Fichiers : AccountController::preferences
+        Fini quand : rayon géo, tailles, tolérance et notifications sont
+                     enregistrés et relus correctement
+        Dépend de : F-15
+
+[ ] F-20 — Personnalisation du tiroir
+        Fichiers : AccountController, templates/element/drawer_banner.php
+        Fini quand : bannière, titre de tiroir et badges épinglés s'affichent
+                     sur le profil public
+        Dépend de : F-16
+
+[ ] F-21 — Paramètres de compte
+        Fichiers : AccountController::{email,password,delete}
+        Fini quand : changer d'email redemande une vérification, changer de
+                     mot de passe exige l'ancien, et supprimer son compte
+                     l'anonymise sans casser les trocs passés
+        Dépend de : F-12
+
+[ ] F-22 — Blocage d'utilisateurs
+        Fichiers : migration CreateUserBlocks, src/Model/Table/UserBlocksTable
+        Fini quand : les fiches d'un utilisateur bloqué n'apparaissent plus
+                     dans la bourse ni dans le feed
+        Dépend de : F-14
+
+
+--------------------------------------------------------------------------------
+LOT 3 — FICHES CHAUSSETTES
+--------------------------------------------------------------------------------
+
+[ ] F-23 — Référentiel des couleurs
+        Fichiers : migration CreateColors, config/Seeds/ColorsSeed.php
+        Fini quand : une trentaine de couleurs sont en base avec leur code
+                     hexadécimal et leur famille
+        Dépend de : F-01
+
+[ ] F-24 — Tables socks et sock_photos
+        Commandes : bin/cake bake migration CreateSocks
+                    bin/cake bake model Socks
+        Fini quand : migrate passe, les associations Users/Colors/SockPhotos
+                     sont câblées, les validations couvrent tous les enums
+        Dépend de : F-23
+
+[ ] F-25 — Dépôt d'une fiche : le formulaire
+        Fichiers : src/Controller/SocksController.php (add),
+                   templates/Socks/add.php
+        Fini quand : une fiche est créée avec ses attributs obligatoires et
+                     apparaît dans le tiroir de son auteur
+        Dépend de : F-24, F-14
+
+[ ] F-26 — Upload multiple de photos
+        Fichiers : SocksController, ImageService, templates/element/dropzone
+        Fini quand : 1 à 4 photos sont uploadées, converties en webp en trois
+                     tailles, EXIF supprimés, la première étant la couverture
+        Dépend de : F-03, F-25
+
+[ ] F-27 — Sélecteur de couleur par pastilles
+        Fichiers : templates/element/color_picker.php, webroot/js/picker.js
+        Fini quand : on choisit couleur principale et secondaire au clic,
+                     avec un repli fonctionnel sans JavaScript
+        Dépend de : F-23, F-25
+
+[ ] F-28 — Modification et retrait d'une fiche
+        Fichiers : SocksController::{edit,delete}
+        Fini quand : le retrait passe le status à 'retiree' sans supprimer la
+                     ligne, et une fiche engagée dans un troc est verrouillée
+        Dépend de : F-25
+
+[ ] F-29 — Brouillons et duplication
+        Fichiers : SocksController::{draft,duplicate}
+        Fini quand : un brouillon se retrouve après déconnexion, et dupliquer
+                     une fiche pré-remplit tout sauf la photo
+        Dépend de : F-25
+
+[ ] F-30 — Garde-fous du dépôt
+        Fichiers : SocksTable (buildRules), src/Model/Rule/QuotaRule.php
+        Fini quand : le 51e dépôt actif est refusé avec un message clair
+        Dépend de : F-25
+
+[ ] F-31 — Mon tiroir
+        Fichiers : src/Controller/DrawerController.php,
+                   templates/Drawer/index.php
+        Fini quand : ses fiches sont listées par statut, avec le compteur
+                     "Vous hébergez N chaussettes en peine"
+        Dépend de : F-25
+
+
+--------------------------------------------------------------------------------
+LOT 4 — PARCOURS, FICHES PUBLIQUES ET FEED
+--------------------------------------------------------------------------------
+
+[ ] F-32 — La bourse : grille paginée
+        Fichiers : SocksController::index, templates/Socks/index.php,
+                   templates/element/sock_card.php
+        Fini quand : les fiches disponibles s'affichent en grille paginée,
+                     sans requête N+1 (vérifié dans DebugKit)
+        Dépend de : F-26
+
+[ ] F-33 — Filtres et recherche
+        Fichiers : SocksController::index, src/Model/Table/SocksTable
+                   (findFiltered)
+        Fini quand : couleur, motif, taille, matière et ville se combinent,
+                     restent dans l'URL et survivent au rechargement
+        Dépend de : F-32
+
+[ ] F-34 — Fiche chaussette publique
+        Fichiers : SocksController::view, templates/Socks/view.php
+        Fini quand : galerie, caractéristiques, bloc propriétaire et bouton
+                     "Proposer un troc" sont en place, avec une URL en slug
+        Dépend de : F-32
+
+[ ] F-35 — Compteur de vues
+        Fichiers : SocksController::view, table seen_socks
+        Fini quand : une vue est comptée une seule fois par session et
+                     jamais pour le propriétaire
+        Dépend de : F-34
+
+[ ] F-36 — Profil public
+        Fichiers : UsersController::profile, templates/Users/profile.php
+        Fini quand : /membres/{pseudo} affiche l'en-tête, les statistiques
+                     et le tiroir paginé, sans jamais exposer l'email
+        Dépend de : F-31
+
+[ ] F-37 — Service de compatibilité
+        Fichiers : src/Service/CompatibilityService.php + son test unitaire
+        Fini quand : le score entre deux chaussettes est calculé selon la
+                     pondération prévue, avec un jeu de tests couvrant les
+                     cas extrêmes (0 % et 100 %)
+        Dépend de : F-24
+
+[ ] F-38 — Affichage de la compatibilité sur la fiche
+        Fichiers : templates/Socks/view.php, src/View/Helper/MatchHelper.php
+        Fini quand : la fiche affiche le libellé humoristique et la miniature
+                     de sa propre chaussette candidate
+        Dépend de : F-37, F-34
+
+[ ] F-39 — Favoris
+        Fichiers : migration CreateFavorites, src/Controller/FavoritesController
+        Fini quand : on met en favori depuis la grille et la fiche, et la
+                     liste "Ma liste d'envies" est consultable
+        Dépend de : F-34
+
+[ ] F-40 — Feed : onglets nouveautés et proximité
+        Fichiers : src/Controller/FeedController.php, templates/Feed/index.php
+        Fini quand : les deux onglets fonctionnent avec une pagination par
+                     curseur, sans doublon entre deux pages
+        Dépend de : F-32
+
+[ ] F-41 — Feed : score de pertinence
+        Fichiers : src/Service/FeedService.php + test unitaire
+        Fini quand : l'onglet "Pour vous" trie selon la pondération prévue,
+                     exclut ses propres fiches et celles des bloqués
+        Dépend de : F-37, F-40
+
+[ ] F-42 — Feed : explicabilité et diversité
+        Fichiers : FeedService, templates/element/sock_card.php
+        Fini quand : chaque carte porte sa raison en une ligne, aucun
+                     propriétaire n'occupe plus de 3 places sur les 20
+                     premières, et 20 % de fiches aléatoires sont injectées
+        Dépend de : F-41
+
+[ ] F-43 — Feed : démarrage à froid et masquage
+        Fichiers : FeedService, FeedController::hide
+        Fini quand : un tiroir vide reçoit un feed de découverte avec un
+                     bandeau d'explication, et "Pas mon style" masque
+                     durablement une fiche
+        Dépend de : F-41
+
+[ ] F-44 — Cache et commande de recalcul
+        Fichiers : src/Command/FeedRebuildCommand.php, config/app.php (cache)
+        Fini quand : bin/cake feed:rebuild remplit sock_scores et le feed
+                     répond en moins de 300 ms sur un jeu de 1000 fiches
+        Dépend de : F-41
+
+
+--------------------------------------------------------------------------------
+LOT 5 — TROCS ET MESSAGERIE
+--------------------------------------------------------------------------------
+
+[ ] F-45 — Tables trades et trade_items
+        Commandes : bin/cake bake migration CreateTrades
+        Fini quand : migrate passe et les associations sont câblées
+        Dépend de : F-24
+
+[ ] F-46 — Proposer un troc
+        Fichiers : src/Controller/TradesController.php (add),
+                   templates/Trades/add.php
+        Fini quand : on sélectionne une ou plusieurs de ses chaussettes plus
+                     un message, et la proposition apparaît chez les deux
+                     parties
+        Dépend de : F-45, F-34
+
+[ ] F-47 — Règles métier du troc
+        Fichiers : TradesTable::buildRules, src/Policy/TradePolicy.php
+        Fini quand : on ne peut ni troquer avec soi-même, ni proposer deux
+                     fois sur la même cible, ni engager une fiche déjà
+                     réservée
+        Dépend de : F-46
+
+[ ] F-48 — Accepter, refuser, annuler
+        Fichiers : TradesController::{accept,decline,cancel}
+        Fini quand : les statuts s'enchaînent correctement et les chaussettes
+                     passent en 'reservee' puis reviennent en 'disponible'
+                     si le troc est annulé
+        Dépend de : F-47
+
+[ ] F-49 — Finalisation à double confirmation
+        Fichiers : TradesController::confirm
+        Fini quand : le troc ne passe en 'finalisee' qu'après confirmation
+                     des deux parties, les chaussettes passent en 'troquee'
+                     et les compteurs sont incrémentés
+        Dépend de : F-48
+
+[ ] F-50 — Messagerie adossée au troc
+        Fichiers : migration CreateMessages,
+                   src/Controller/MessagesController.php
+        Fini quand : les deux parties échangent dans le fil du troc, avec
+                     un indicateur de non-lus
+        Dépend de : F-46
+
+[ ] F-51 — Emails transactionnels
+        Fichiers : src/Mailer/TradeMailer.php + templates email
+        Fini quand : nouvelle proposition, réponse et nouveau message
+                     déclenchent un email respectant les préférences
+        Dépend de : F-19, F-50
+
+
+--------------------------------------------------------------------------------
+LOT 6 — COMMUNAUTÉ, MODÉRATION, QUALITÉ
+--------------------------------------------------------------------------------
+
+[ ] F-52 — Notifications in-app
+        Fichiers : migration CreateNotifications, element/notification_bell
+        Fini quand : la cloche affiche le nombre de non-lues et le clic
+                     mène à l'élément concerné
+        Dépend de : F-50
+
+[ ] F-53 — Badges
+        Fichiers : migrations CreateBadges + CreateUsersBadges,
+                   src/Service/BadgeService.php, seed des badges
+        Fini quand : finaliser son premier troc attribue automatiquement
+                     "Premier Troc", visible sur le profil
+        Dépend de : F-49
+
+[ ] F-54 — Avis après troc
+        Fichiers : migration CreateReviews, src/Controller/ReviewsController
+        Fini quand : chaque partie note l'autre une seule fois par troc
+                     finalisé, et la moyenne s'affiche sur le profil
+        Dépend de : F-49
+
+[ ] F-55 — Classement mensuel
+        Fichiers : src/Controller/LeaderboardController.php
+        Fini quand : le top 20 du mois s'affiche et repart de zéro le 1er
+        Dépend de : F-49
+
+[ ] F-56 — Signalements
+        Fichiers : migration CreateReports, src/Controller/ReportsController
+        Fini quand : on signale une fiche ou un membre avec un motif, et le
+                     signalement arrive en file de modération
+        Dépend de : F-34
+
+[ ] F-57 — Back-office de modération
+        Fichiers : src/Controller/Admin/*, templates/Admin/*
+        Fini quand : un modérateur traite les signalements, masque une fiche
+                     et suspend un compte, le tout protégé par policy
+        Dépend de : F-56, F-14
+
+[ ] F-58 — Le mur des réunions
+        Fichiers : src/Controller/PairsController.php
+        Fini quand : la galerie des paires reconstituées s'affiche en
+                     avant/après à partir des trocs finalisés
+        Dépend de : F-49
+
+[ ] F-59 — Jeu de données de démonstration
+        Fichiers : config/Seeds/DemoSeed.php
+        Fini quand : bin/cake migrations seed crée 20 comptes, 150 fiches et
+                     quelques trocs à tous les stades
+        Dépend de : F-45
+
+[ ] F-60 — Tests et intégration continue
+        Fichiers : tests/TestCase/**, .github/workflows/ci.yml
+        Fini quand : le cycle complet d'un troc est couvert par un test
+                     d'intégration, et phpcs + phpstan + phpunit sont verts
+                     sur la CI
+        Dépend de : F-49
+
+
+--------------------------------------------------------------------------------
+CHEMIN CRITIQUE POUR UNE DÉMO QUI TIENT DEBOUT
+--------------------------------------------------------------------------------
+F-01 > F-02 > F-04 > F-06 > F-07 > F-08 > F-11 > F-14 > F-23 > F-24 > F-25
+     > F-26 > F-31 > F-32 > F-34 > F-45 > F-46 > F-48 > F-49 > F-50
+
+Ces 20 tickets suffisent à montrer le produit de bout en bout : je m'inscris,
+je me connecte, je dépose une chaussette, je parcours la bourse, je propose
+un troc, l'autre accepte, on discute, le troc se finalise. Tout le reste
+enrichit ce squelette.
