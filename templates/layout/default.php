@@ -1,55 +1,59 @@
 <?php
 /**
- * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
- * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
- *
- * Licensed under The MIT License
- * For full copyright and license information, please see the LICENSE.txt
- * Redistributions of files must retain the above copyright notice.
- *
- * @copyright     Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
- * @link          https://cakephp.org CakePHP(tm) Project
- * @since         0.10.0
- * @license       https://opensource.org/licenses/mit-license.php MIT License
  * @var \App\View\AppView $this
  */
+$identity = $this->request->getAttribute('identity');
+$controller = $this->request->getParam('controller');
+$action = $this->request->getParam('action');
 
-$cakeDescription = 'CakePHP: the rapid development php framework';
+$isActive = fn(string $ctrl, string $act): string => $controller === $ctrl && $action === $act ? ' is-active' : '';
 ?>
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
     <?= $this->Html->charset() ?>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>
-        <?= $cakeDescription ?>:
-        <?= $this->fetch('title') ?>
-    </title>
-    <?= $this->Html->meta('icon') ?>
-
-    <?= $this->Html->css(['normalize.min', 'milligram.min', 'fonts', 'cake']) ?>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chaussette Orpheline — <?= $this->fetch('title') ?: 'troc de chaussettes seules' ?></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <?= $this->Html->css('app') ?>
     <?= $this->fetch('meta') ?>
     <?= $this->fetch('css') ?>
     <?= $this->fetch('script') ?>
 </head>
-<body>
-    <nav class="top-nav">
-        <div class="top-nav-title">
-            <a href="<?= $this->Url->build('/') ?>"><span>Cake</span>PHP</a>
+<body<?= $identity ? '' : ' class="guest-bg"' ?>>
+
+<header class="app-header">
+    <div class="wrap header-inner<?= $identity ? '' : ' header-inner--center' ?>">
+        <div class="brand">
+            <?= $this->Html->image('logo.png', ['class' => 'brand-icon', 'alt' => '']) ?>
+            <div>
+                <h1><a href="<?= $this->Url->build('/') ?>">Chaussette Orpheline</a></h1>
+                <p class="tagline">Le troc des chaussettes qui ont perdu leur moitié</p>
+            </div>
         </div>
-        <div class="top-nav-links">
-            <a target="_blank" rel="noopener" href="https://book.cakephp.org/5/">Documentation</a>
-            <a target="_blank" rel="noopener" href="https://api.cakephp.org/">API</a>
-        </div>
-    </nav>
-    <main class="main">
-        <div class="container">
-            <?= $this->Flash->render() ?>
-            <?= $this->fetch('content') ?>
-        </div>
-    </main>
-    <footer>
-    </footer>
+        <?php if ($identity) : ?>
+        <nav class="tabs" aria-label="Navigation principale">
+            <a class="tab-link<?= $isActive('Chaussettes', 'index') ?>" href="<?= $this->Url->build(['controller' => 'Chaussettes', 'action' => 'index']) ?>">Parcourir</a>
+            <a class="tab-link<?= $isActive('Chaussettes', 'mine') ?>" href="<?= $this->Url->build(['controller' => 'Chaussettes', 'action' => 'mine']) ?>">Mon tiroir</a>
+            <a class="tab-link<?= $isActive('Propositions', 'index') ?>" href="<?= $this->Url->build(['controller' => 'Propositions', 'action' => 'index']) ?>">Propositions</a>
+            <?= $this->Form->postLink('Déconnexion', ['controller' => 'Utilisateurs', 'action' => 'logout'], ['class' => 'tab-link']) ?>
+        </nav>
+        <?php endif; ?>
+    </div>
+</header>
+
+<main class="wrap">
+    <?= $this->Flash->render() ?>
+    <?= $this->fetch('content') ?>
+</main>
+
+<footer class="app-footer">
+    <div class="wrap footer-inner">
+        <p>Chaussette Orpheline — le troc entre voisins pour retrouver des jumelles.</p>
+    </div>
+</footer>
+
 </body>
 </html>
