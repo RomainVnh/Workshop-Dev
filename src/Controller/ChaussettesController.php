@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use Cake\Http\Response;
+use Psr\Http\Message\UploadedFileInterface;
 
 /**
  * Chaussettes Controller
@@ -65,28 +66,93 @@ class ChaussettesController extends AppController
      * @return \Cake\Http\Response|null
      */
     public function add(): ?Response
-    {
-        $chaussette = $this->Chaussettes->newEmptyEntity();
+{
+    $chaussette = $this->Chaussettes->newEmptyEntity();
 
-        if ($this->request->is('post')) {
-            $data = $this->request->getData();
-            $data['id_utilisateur'] = $this->currentUserId();
+    if ($this->request->is('post')) {
+        $data = $this->request->getData();
+        $data['id_utilisateur'] = $this->currentUserId();
 
-            $chaussette = $this->Chaussettes->patchEntity($chaussette, $data, [
-                'accessibleFields' => ['id_utilisateur' => true],
-            ]);
+        // Gestion de la photo
+        $photo = $data['photo'] ?? null;
 
-            if ($this->Chaussettes->save($chaussette)) {
-                $this->Flash->success('Chaussette ajoutée à ton tiroir.');
-
-                return $this->redirect(['action' => 'mine']);
+        if ($photo instanceof UploadedFileInterface && $photo->getError() !== UPLOAD_ERR_NO_FILE) {
+            if ($photo->getError() !== UPLOAD_ERR_OK) {
+                $this->Flash->error("La photo n'a pas pu être envoyée.");
+                $this->set(compact('chaussette'));
+                return null;
             }
 
-            $this->Flash->error("La chaussette n'a pas pu être ajoutée.");
+            // Taille maximale : 5 Mo
+            if ($photo->getSize() > 5 * 1024 * 1024) {
+                $this->Flash->error('La photo ne doit pas dépasser 5 Mo.');
+                $this->set(compact('chaussette'));
+                return null;
+            }
+
+            // Vérification réelle du type du fichier
+            $tmpFile = $photo->getStream()->getMetadata('uri');
+
+            $finfo = new \finfo(FILEINFO_MIME_TYPE);
+            $mimeType = $finfo->file($tmpFile);
+
+            $allowedTypes = [
+                'image/jpeg' => 'jpg',
+                'image/png' => 'png',
+                'image/webp' => 'webp',
+            ];
+
+            if (!isset($allowedTypes[$mimeType])) {
+                $this->Flash->error(
+                    'Format de photo non autorisé. Utilise uniquement JPG, PNG ou WEBP.'
+                );
+
+                $this->set(compact('chaussette'));
+                return null;
+            }
+
+            // Création du dossier de stockage si nécessaire
+            $uploadDirectory = WWW_ROOT . 'img' . DS . 'chaussettes' . DS;
+
+            if (!is_dir($uploadDirectory)) {
+                mkdir($uploadDirectory, 0775, true);
+            }
+
+            // Nom unique et sécurisé
+            $extension = $allowedTypes[$mimeType];
+            $filename = bin2hex(random_bytes(16)) . '.' . $extension;
+
+            // Déplacement de la photo
+            $photo->moveTo($uploadDirectory . $filename);
+
+            // On stocke uniquement le nom du fichier en BDD
+            $data['photo'] = $filename;
+        } else {
+            // Aucune photo sélectionnée
+            $data['photo'] = null;
         }
 
-        $this->set(compact('chaussette'));
+        $chaussette = $this->Chaussettes->patchEntity(
+            $chaussette,
+            $data,
+            [
+                'accessibleFields' => [
+                    'id_utilisateur' => true
+                ],
+            ]
+        );
 
-        return null;
+        if ($this->Chaussettes->save($chaussette)) {
+            $this->Flash->success('Chaussette ajoutée à ton tiroir.');
+
+            return $this->redirect(['action' => 'mine']);
+        }
+
+        $this->Flash->error("La chaussette n'a pas pu être ajoutée.");
     }
+
+    $this->set(compact('chaussette'));
+
+    return null;
+}
 }

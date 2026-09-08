@@ -287,6 +287,14 @@ main {
   justify-content: center;
   font-size: 2.4rem;
   background: var(--sock-bg, var(--blue));
+  overflow: hidden;
+}
+
+.sock-card .sock-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .sock-card .sock-name {

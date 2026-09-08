@@ -9,7 +9,16 @@ $hash = crc32($chaussette->couleur . $chaussette->motif);
 $swatch = $palette[$hash % count($palette)];
 ?>
 <article class="sock-card">
-    <div class="sock-visual" style="--sock-bg: <?= $swatch ?>">🧦</div>
+    <div class="sock-visual" style="--sock-bg: <?= $swatch ?>">
+        <?php if (!empty($chaussette->photo)) : ?>
+            <img
+                src="<?= $this->Url->build('/img/chaussettes/' . $chaussette->photo) ?>"
+                alt="Photo de la chaussette"
+            >
+        <?php else : ?>
+            🧦
+        <?php endif; ?>
+    </div>
 
     <?php if ($mode === 'browse') : ?>
         <span class="sock-owner">Chez <?= h($chaussette->utilisateur->nom) ?></span>
