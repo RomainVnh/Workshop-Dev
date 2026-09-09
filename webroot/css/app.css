@@ -408,6 +408,49 @@ main {
   margin-top: 10px;
 }
 
+.edit-layout {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: 24px;
+  align-items: stretch;
+}
+
+@media (max-width: 720px) {
+  .edit-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .edit-photo img {
+    aspect-ratio: 4 / 3;
+    flex: none;
+  }
+}
+
+.edit-photo {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+}
+
+.edit-photo img {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  object-fit: cover;
+  display: block;
+}
+
+.edit-photo p {
+  padding: 12px;
+  margin: 0;
+  flex: none;
+  text-align: center;
+  font-weight: 700;
+  color: var(--ink);
+}
+
 .target-sock {
   display: flex;
   align-items: center;
