@@ -50,9 +50,6 @@ $isActive = fn(string $ctrl, string $act): string => $controller === $ctrl && $a
 </main>
 
 <footer class="app-footer">
-    <div class="wrap footer-inner">
-        <p>Chaussette Orpheline — le troc entre voisins pour retrouver des jumelles.</p>
-    </div>
 </footer>
 
 </body>
