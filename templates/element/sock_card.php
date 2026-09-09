@@ -45,5 +45,9 @@ $hasPhoto = $chaussette->photo && file_exists(WWW_ROOT . 'img' . DS . 'chaussett
             'action' => 'edit',
             $chaussette->id_chaussette,
         ], ['class' => 'btn btn-ghost']) ?>
+        <?= $this->Form->postLink('Supprimer', ['action' => 'delete', $chaussette->id_chaussette], ['class' => 'btn btn-decline btn-sm', 'confirm' => 'Supprimer cette chaussette ?']) ?>
     <?php endif; ?>
 </article>
+
+
+

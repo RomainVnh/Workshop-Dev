@@ -239,4 +239,29 @@ class ChaussettesController extends AppController
 
         return null;
     }
+
+    /**
+     * @param string|null $id Chaussette id
+     * @return \Cake\Http\Response|null
+     */
+    public function delete(?string $id = null): ?Response
+    {
+        $this->request->allowMethod(['post', 'delete']);
+
+        $chaussette = $this->Chaussettes->get($id);
+
+        if ($chaussette->id_utilisateur !== $this->currentUserId()) {
+            $this->Flash->error("Cette chaussette n'est pas dans ton tiroir.");
+
+            return $this->redirect(['action' => 'mine']);
+        }
+
+        if ($this->Chaussettes->delete($chaussette)) {
+            $this->Flash->success('Chaussette supprimée.');
+        } else {
+            $this->Flash->error("La chaussette n'a pas pu être supprimée.");
+        }
+
+        return $this->redirect(['action' => 'mine']);
+    }
 }
