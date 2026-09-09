@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use Cake\Http\Response;
+use finfo;
 use Psr\Http\Message\UploadedFileInterface;
 
 /**
@@ -155,4 +156,87 @@ class ChaussettesController extends AppController
 
     return null;
 }
+
+    /**
+     * @param string|null $id Chaussette id
+     * @return \Cake\Http\Response|null
+     */
+    public function edit(?string $id = null): ?Response
+    {
+        $chaussette = $this->Chaussettes->get($id);
+
+        if ($chaussette->id_utilisateur !== $this->currentUserId()) {
+            $this->Flash->error("Cette chaussette n'est pas dans ton tiroir.");
+
+            return $this->redirect(['action' => 'mine']);
+        }
+
+        if ($this->request->is(['post', 'put'])) {
+            $data = $this->request->getData();
+
+            $photo = $data['photo'] ?? null;
+
+            if ($photo instanceof UploadedFileInterface && $photo->getError() !== UPLOAD_ERR_NO_FILE) {
+                if ($photo->getError() !== UPLOAD_ERR_OK) {
+                    $this->Flash->error("La photo n'a pas pu être envoyée.");
+                    $this->set(compact('chaussette'));
+
+                    return null;
+                }
+
+                if ($photo->getSize() > 5 * 1024 * 1024) {
+                    $this->Flash->error('La photo ne doit pas dépasser 5 Mo.');
+                    $this->set(compact('chaussette'));
+
+                    return null;
+                }
+
+                $tmpFile = $photo->getStream()->getMetadata('uri');
+
+                $finfo = new finfo(FILEINFO_MIME_TYPE);
+                $mimeType = $finfo->file($tmpFile);
+
+                $allowedTypes = [
+                    'image/jpeg' => 'jpg',
+                    'image/png' => 'png',
+                    'image/webp' => 'webp',
+                ];
+
+                if (!isset($allowedTypes[$mimeType])) {
+                    $this->Flash->error('Format de photo non autorisé. Utilise uniquement JPG, PNG ou WEBP.');
+                    $this->set(compact('chaussette'));
+
+                    return null;
+                }
+
+                $uploadDirectory = WWW_ROOT . 'img' . DS . 'chaussettes' . DS;
+
+                if (!is_dir($uploadDirectory)) {
+                    mkdir($uploadDirectory, 0775, true);
+                }
+
+                $extension = $allowedTypes[$mimeType];
+                $filename = bin2hex(random_bytes(16)) . '.' . $extension;
+                $photo->moveTo($uploadDirectory . $filename);
+
+                $data['photo'] = $filename;
+            } else {
+                unset($data['photo']);
+            }
+
+            $chaussette = $this->Chaussettes->patchEntity($chaussette, $data);
+
+            if ($this->Chaussettes->save($chaussette)) {
+                $this->Flash->success('Chaussette mise à jour.');
+
+                return $this->redirect(['action' => 'mine']);
+            }
+
+            $this->Flash->error("La chaussette n'a pas pu être mise à jour.");
+        }
+
+        $this->set(compact('chaussette'));
+
+        return null;
+    }
 }

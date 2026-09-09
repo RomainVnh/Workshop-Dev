@@ -4,6 +4,7 @@
 /logs/*
 /tmp/*
 /vendor/*
+/webroot/img/chaussettes/*
 
 # OS generated files #
 ######################
